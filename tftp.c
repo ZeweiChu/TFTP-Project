@@ -1,58 +1,24 @@
-//tftp.c
 #include "tftp.h"
 
-recvData(int sockfd, struct sockaddr *pserv_addr, int servlen, char *filename){
-	int n, clilen;
-	
-	short signed block = 0;
-	
-	struct TFTP_DATA *dataPacket = malloc(sizeof(struct TFTP_DATA));
-	struct TFTP_ACK *ack = malloc(sizeof(struct TFTP_ACK));
-	FILE *fp = fopen(filename, "w");
-	char buffer[MAX];
-
-	for (;;){
-		clilen = sizeof(struct sockaddr);
-
-		n = recvfrom(sockfd, dataPacket, sizeof(struct TFTP_DATA), 0, pserv_addr, &servlen);
-		if (n < 0) {
-			printf(stderr, "Error on receiving DATA\n");
-			//TODO: 
-		}
-
-		if (ntohs(dataPacket->opcode) == ERROR) {
-			printf(stderr, "Error received - %s\n", errMsg[ntohs(dataPacket->block)]);
-			//TODO: 
-		}
-
-		int length = strlen(dataPacket->data);
-		(buffer, dataPacket->data);
-		
+handler(int signum){
+	if (recv_len<0){
+		timeout++;
+		printf("timeout count #%d\n", timeout);
 	}
 }
 
-sendData(int sockfd, struct sockaddr *recv_addr, int recvlen, char *filename){
-	int n, len;
 
-	signed short int block = 0;
-	FILE *fp = fopen(filename, "r");
-	char buffer[MAX];
-
-	if (fp == NULL){
-		//TODO: print out error mesg and send error mesg
-	}
-
-	struct TFTP_DATA * dataPacket;
-	struct TFTP_ACK * ack;
-	dataPacket = (struct TFTP_DATA *)malloc(sizeof(struct TFTP_DATA));
-	memset(dataPacket, 0, sizeof(struct TFTP_DATA));
-	ack = (struct TFTP_ACK*)malloc(sizeof(struct TFTP_ACK));
-	memset(ack, 0, sizeof(struct TFTP_ACK));
-
-
+init(){
+	signal(SIGALRM, handler);
+	siginterrupt(SIGALRM, 1);
+	timeout = 0;
 }
 
-processError()
-
-
-int main()
+processError(char* mesg){
+	unsigned short* p = (unsigned short*)(mesg+2);
+	int errorcode = ntohs(*p);
+	if (errorcode == 1) printf("File not found\n");
+	else if (errorcode == 2) printf("Access violation\n");
+	else if (errorcode == 6) printf("File already exists\n");
+	exit(1);
+}
