@@ -88,13 +88,12 @@ char* filename;
 		p++;
 		*p = htons(1);
 		n = 4;
+		printf("sending error block...\n");
 		if (sendto(sockfd, mesg, n, 0, &pcli_addr, clilen) != n){
 			printf("Error on sending error packet\n");
 			exit(4);
 		}
-		printf("file not found\n");
-		exit(2);
-		
+		processError(1);	
 	}
 	if (access(filename, R_OK) == -1){
 		bzero(mesg, MAX_SIZE);
@@ -103,12 +102,12 @@ char* filename;
 		p++;
 		*p = htons(2);
 		n = 4;
+		printf("sending error block\n");
 		if (sendto(sockfd, mesg, n, 0, &pcli_addr, clilen) != n){
 			printf("Error on sending error packet\n");
 			exit(4);
 		}
-		printf("file not found\n");
-		exit(2);
+		processError(2);
 	}
 
 	
@@ -125,13 +124,13 @@ char* filename;
 		n+=4;
 		status = SENDING;
 		while (status == SENDING){
-			alarm(1);
 			printf("sending data block #%d...\n", curr_block);
 			if (sendto(sockfd, data_pkt, n, 0, &pcli_addr, clilen) != n){
 				printf("sendto error on block %d\n", curr_block);
 				exit(4);
 			}
 			while (1){
+				alarm(1);
 				bzero(mesg, MAX_SIZE);
 				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, &pcli_addr, &clilen);
 				if (recv_len < 0){
@@ -171,8 +170,8 @@ char* filename;
 	char data[MAX_DATA];
 	char ack_pkt[MAX_SIZE];
 	int status = DATA;
-	unsigned short curr_block = 0;
-	unsigned short block = 0;
+	int curr_block = 0;
+	int block = 0;
 	unsigned short* p;
 	int n;
 	if (access(filename, 0) == 0){
@@ -182,15 +181,32 @@ char* filename;
 		p++;
 		*p = htons(6);
 		n = 4;
+		printf("sending error block\n");
 		if (sendto(sockfd, ack_pkt, n, 0, &pcli_addr, clilen) != n){
 			printf("Error on sending error packet\n");
 			exit(4);
 		}
-		printf("file already exists\n");
-		exit(4);
+		processError(6);
+	}
+	
+	FILE* fp = fopen(filename, "w");
+	if (access(filename, W_OK) == -1){
+		bzero(ack_pkt, MAX_SIZE);
+		p = (unsigned short*)ack_pkt;
+		*p = htons(ERROR);
+		p++;
+		*p = htons(2);
+		n = 4;
+		printf("sending error block\n");
+		if (sendto(sockfd, ack_pkt, n, 0, &pcli_addr, clilen) != n){
+			printf("Error on sending error packet\n");
+			exit(4);
+		}
+		processError(2);
+		
 	}
 
-	FILE* fp = fopen(filename, "w");
+
 	while (status == DATA){
 
 		bzero(ack_pkt, MAX_SIZE);
@@ -217,12 +233,15 @@ char* filename;
 			} else {
 				alarm(0);
 				timeout = 0;
-				if (recv_len < MAX_SIZE) status = ENDING;
 				p = (unsigned short*)(mesg+2);
 				block = ntohs(*p);
 				printf("received data block #%d\n", block);
 				bzero(data, MAX_DATA);
 				n = recv_len - 4;
+				if (n < MAX_DATA){
+					status = ENDING;
+					printf("last block\n");
+				}
 				bcopy(mesg+4, data, n);
 				if (block > curr_block) {
 					curr_block = block;
@@ -255,6 +274,7 @@ main(argc, argv)
 int argc;
 char *argv[];
 {
+	printf(title);
 	int sockfd;
 	struct sockaddr_in serv_addr;
 	progname = argv[0];
@@ -267,6 +287,7 @@ char *argv[];
 	if (argc == 3){
 		if (strcmp(argv[1], "-p") == 0){
 			port = atoi(argv[2]);
+			printf("port number changed to %s\n", argv[2]);
 		} else {
 			printf("wrong arguments\n");
 			printf(usage);

@@ -1,0 +1,30 @@
+directory tree
+/28_zewei_zhixin
+ |--README
+ |--/client
+	|--tftp.h
+	|--tftp.c
+	|--tftpclient.c
+ |--/server
+	|--tftp.h
+	|--tftp.c
+	|--tftpserver.c
+
+to compile:
+1. cd client
+2. gcc tftpclient.c -o tftpclient
+3. cd..
+4. cd server
+5. gcc tftpserver.c -o tftpserver
+6. cd..
+
+to run the program:
+1. open two terminals
+2. for the server side
+	cd server
+	./tftpserver or ./tftpserver -p portnumber
+3. for the client side
+	cd client
+	./tftpclient -r/-w filename or
+           ./tftpclient -r/-w filename -p portnumber
+4. do not forget to put the test files you want to transfer to the corresponding directory client/ or server/

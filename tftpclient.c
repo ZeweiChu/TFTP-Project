@@ -11,8 +11,6 @@ int servlen;
 char* filename;
 int mode;
 {
-	struct sockaddr child_pserv_addr;
-	int child_servlen;
 	char rq[MAX_SIZE];
 	bzero(rq, MAX_SIZE);
 	unsigned short* p = (unsigned short*)rq;
@@ -23,18 +21,14 @@ int mode;
 	strcpy(c, "octet"); 
 	int n = 2 + strlen(filename) + 7;
 
-
 	int status;
+	FILE* fp;
 	if (mode == RRQ){
 		
 		status = RRQ;
-		unsigned short curr_block = 0;
-		unsigned short block = 0;
-		FILE* fp;
-		if (access(filename, 0) == 0){
-			printf("File already exists\n");
-			exit(1);
-		}
+		int curr_block = 0;
+		int block = 0;
+		if (access(filename, 0) == 0) processError(6);
 		char mesg[MAX_SIZE];
 		char data[MAX_DATA];
 		char ack_pkt[MAX_DATA];
@@ -49,34 +43,35 @@ int mode;
 					printf("sending request error\n");
 					exit(3);
 				}
+				char* fname = filename;
 				bzero(mesg, MAX_SIZE);
-				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, &child_pserv_addr, &child_servlen);
-				curr_block = block;
+				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, pserv_addr, &servlen);
 				if (recv_len < 0){
-						if (timeout >= 10){
+					if (timeout >= 10){
 						printf("connection lost.\n");
 						exit(4);
 					}
 				} else {
 					alarm(0);
 					timeout = 0;
-					fp = fopen(filename, "w");
+					fp = fopen(fname, "w");
+					if (fp == NULL) printf("NULL: %s\n", strerror(errno));
 					unsigned short* p = (unsigned short*)mesg;
 					opcode = ntohs(*p);
-					if (opcode == ERROR) processError(mesg);
 					p++;
 					block = ntohs(*p);
+					if (opcode == ERROR) processError(block);
 					printf("received data block #%d\n", block);
-					if (block > curr_block) {
-						status = DATA;
-						curr_block = block;
-						break; 
-					}
 					n = recv_len - 4;
+					status = DATA;
 					if (n < MAX_DATA) status = ENDING;
 					bzero(data, MAX_DATA);
 					bcopy(mesg+4, data, n);
-					fwrite(data, sizeof(char), n, fp);
+					if (block > curr_block){
+						fwrite(data, sizeof(char), n, fp);	
+						curr_block = block;
+						break;
+					}
 				}
 			}
 		}
@@ -91,12 +86,12 @@ int mode;
 			while (1){
 				alarm(1);
 				printf("sending ack block #%d\n", curr_block);
-				if (sendto(sockfd, ack_pkt, n, 0, &child_pserv_addr, child_servlen) != n){
+				if (sendto(sockfd, ack_pkt, n, 0, pserv_addr, servlen) != n){
 					printf("sending ack block #%d error on socket\n", curr_block);
 					exit(3);
 				}
 				bzero(mesg, MAX_SIZE);
-				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, &child_pserv_addr, &child_servlen);
+				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, pserv_addr, &servlen);
 				if (recv_len < 0){
 					if (timeout >= 10){	
 						printf("connection lost\n");
@@ -112,7 +107,10 @@ int mode;
 					printf("received block #%d of data\n", block);
 					bzero(data, MAX_DATA);
 					n = recv_len - 4;
-					if (n < MAX_DATA) status = ENDING;
+					if (n < MAX_DATA){
+						status = ENDING;
+						printf("last block\n");
+					}
 					bcopy(c, data, n);
 					if (block > curr_block){
 						fwrite(data, sizeof(char), n, fp);
@@ -129,7 +127,7 @@ int mode;
 		*p = htons(curr_block);
 		n = 4;
 		printf("sending ack block #%d\n", curr_block);
-		if (sendto(sockfd, ack_pkt, n, 0, &child_pserv_addr, child_servlen) != n){
+		if (sendto(sockfd, ack_pkt, n, 0, pserv_addr, servlen) != n){
 			printf("sending ack block #%d error on socket\n", curr_block);
 			exit(3);
 		}
@@ -139,32 +137,26 @@ int mode;
 			
 	} else {
 		status = WRQ;
-		unsigned short block = 0;
-		if (access(filename, R_OK) == -1){
-			printf("no permission to access the file\n");
-			exit(1);
-		}
-		FILE* fp = fopen(filename, "r");
-		if (fp == NULL) {
-			printf("file not found\n");
-			exit(1);
-		}
+		int block = 0;
+		if (access(filename, R_OK) == -1) processError(2);
+		fp = fopen(filename, "r");
+		if (fp == NULL) processError(1);
 		char mesg[MAX_SIZE];
-		unsigned short curr_block = 0;
+		int curr_block = 0;
 		char data[MAX_DATA];
 		char data_pkt[MAX_SIZE];
 		unsigned short* p;
 		char* c;
 		while (status == WRQ){
-			alarm(1);
-			printf("sending wrq of file %s...\n", filename);
-			if (sendto(sockfd, rq, n, 0, pserv_addr, servlen) != n){
-				printf("sending request error\n");
-				exit(3);
-			}	
 			while (1){
+				alarm(1);
+				printf("sending wrq of file %s...\n", filename);
+				if (sendto(sockfd, rq, n, 0, pserv_addr, servlen) != n){
+					printf("sending request error\n");
+					exit(3);
+				}	
 				bzero(mesg, MAX_SIZE);
-				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, &child_pserv_addr, &child_servlen);
+				recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, pserv_addr, &servlen);
 				if (recv_len < 0){
 					if (timeout >= 10){
 						printf("connection lost.\n");
@@ -176,17 +168,17 @@ int mode;
 					timeout = 0;
 					p = (unsigned short*)mesg;
 					int opcode = ntohs(*p);
-					if (opcode == ERROR) processError(mesg);
 					p++;
 					block = ntohs(*p);
+					if (opcode == ERROR) processError(block);
 					printf("received ACK block #%d\n", block);
-					printf("%s\n", &child_pserv_addr);
 					if (block == curr_block){
 						curr_block++;
 						break;
 					}
 
 				}
+				break;
 			}
 		}
 		while (status == DATA){
@@ -203,17 +195,17 @@ int mode;
 			n+=4;
 			status = SENDING;
 			while (status == SENDING){
-				alarm(1);
+			//	alarm(1);
 				printf("sending data block #%d...\n", curr_block);
-				printf("%s\n", child_pserv_addr);
-				if (sendto(sockfd, data_pkt, n, 0, &child_pserv_addr, child_servlen) != n){
+				if (sendto(sockfd, data_pkt, n, 0, pserv_addr, servlen) != n){
 					printf("error on sending data block #%d...\n", curr_block);
 					printf("%s\n", strerror(errno));
 					exit(3);
 				}
-				while (1){
+				while (1){	
+					alarm(1);
 					bzero(mesg, MAX_SIZE);
-					recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, &child_pserv_addr, &child_servlen);
+					recv_len = recvfrom(sockfd, mesg, MAX_SIZE, 0, pserv_addr, &servlen);
 					if (recv_len < 0){
 						if (timeout >= 10){	
 							printf("connection lost\n");
@@ -225,7 +217,7 @@ int mode;
 						alarm(0);	
 						timeout = 0;
 						p = (unsigned short*)(mesg+2);
-						int block = ntohs(*p);
+						block = ntohs(*p);
 						printf("received ACK block #%d\n", block);
 						if (block == curr_block){
 							curr_block++;
@@ -243,6 +235,7 @@ main(argc, argv)
 int 	argc;
 char 	*argv[];
 {
+	printf(title);
 	int sockfd;
 	struct sockaddr_in cli_addr, serv_addr;
 	int port = SERV_UDP_PORT;
@@ -255,6 +248,7 @@ char 	*argv[];
 	if (argc == 5){
 		if (strcmp(argv[3], "-p") == 0){
 			port = atoi(argv[4]);	
+			printf("port number changed to %s\n", argv[4]);
 		} else {
 			printf("invalid argument\n");
 			printf(usage);

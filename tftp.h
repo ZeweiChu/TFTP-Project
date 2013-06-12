@@ -25,15 +25,10 @@
 #define ACK 	4
 #define ERROR	5
 
-
-#define RRQ_RECEIVED 	1
-#define RRQ_SENT 	1
-#define WRQ_RECEIVED	2
-#define WRQ_SENT	2
-#define WRITING 3
-#define READING 3
 #define SENDING 4
 #define ENDING	5
+
+char* title = "Produced by Zewei Chu, Zhixin Xu, group 28:\n";
 
 int timeout;
 int recv_len;

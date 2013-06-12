@@ -14,11 +14,9 @@ init(){
 	timeout = 0;
 }
 
-processError(char* mesg){
-	unsigned short* p = (unsigned short*)(mesg+2);
-	int errorcode = ntohs(*p);
-	if (errorcode == 1) printf("File not found\n");
-	else if (errorcode == 2) printf("Access violation\n");
-	else if (errorcode == 6) printf("File already exists\n");
+processError(int errorcode){
+	if (errorcode == 1) printf("file not found\n");
+	else if (errorcode == 2) printf("access violation\n");
+	else if (errorcode == 6) printf("file already exists\n");
 	exit(1);
 }
